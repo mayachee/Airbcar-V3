@@ -17,11 +17,16 @@ import {
   Map,
   List,
   Database,
-  RefreshCw
+  RefreshCw,
+  RotateCcw,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Filter
 } from 'lucide-react';
 import { CarListing, SearchFilters } from '../../types';
 import { allCarsData } from '../../data/carsData';
 import { SearchMapView } from './SearchMapView';
+import { SearchFilterSidebar } from './SearchFilterSidebar';
 import { subscribeToCars } from '../../services/firebase';
 
 interface SearchViewProps {
@@ -88,11 +93,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
   const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
   const [viewLayout, setViewLayout] = useState<'split' | 'map' | 'list'>('split');
 
-  // Filter drawer modal
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  // Filter sidebar and mobile drawer state
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isMobileFilterDrawerOpen, setIsMobileFilterDrawerOpen] = useState<boolean>(false);
   const [selectedTransmission, setSelectedTransmission] = useState<'all' | 'automatic' | 'manual'>('all');
   const [selectedFuel, setSelectedFuel] = useState<'all' | 'gasoline' | 'diesel'>('all');
-  const [maxPriceFilter, setMaxPriceFilter] = useState<number>(3000);
+  const [selectedSeats, setSelectedSeats] = useState<'any' | '4' | '5' | '7'>('any');
 
   // Calculate rental duration in days
   const rentalDays = useMemo(() => {
@@ -107,8 +113,47 @@ export const SearchView: React.FC<SearchViewProps> = ({
     }
   }, [pickupDate, returnDate]);
 
-  // Categories list matching screenshot
+  // Categories list
   const categories = ['All', 'Sedan', 'SUV', 'Convertible', 'City', '4x4', 'Coupe', 'Family'];
+
+  // Price bounds derived from active fleet
+  const priceBounds = useMemo(() => {
+    if (!activeCars || activeCars.length === 0) return { min: 200, max: 3500 };
+    const rates = activeCars.map(c => c.dailyRate || 0);
+    const min = Math.max(100, Math.floor(Math.min(...rates) / 50) * 50);
+    const max = Math.max(min + 100, Math.ceil(Math.max(...rates) / 100) * 100);
+    return { min, max };
+  }, [activeCars]);
+
+  const [minPriceFilter, setMinPriceFilter] = useState<number>(200);
+  const [maxPriceFilter, setMaxPriceFilter] = useState<number>(3500);
+
+  // Sync price filter range when active fleet bounds calculate
+  useEffect(() => {
+    if (priceBounds.max > 0) {
+      setMaxPriceFilter(priceBounds.max);
+      setMinPriceFilter(priceBounds.min);
+    }
+  }, [priceBounds.min, priceBounds.max]);
+
+  // Dynamic counts for sidebar badges
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: activeCars.length };
+    categories.forEach(cat => {
+      if (cat !== 'All') {
+        counts[cat] = activeCars.filter(c => c.category?.toLowerCase() === cat.toLowerCase()).length;
+      }
+    });
+    return counts;
+  }, [activeCars, categories]);
+
+  const transmissionCounts = useMemo(() => {
+    return {
+      all: activeCars.length,
+      automatic: activeCars.filter(c => c.transmission === 'automatic').length,
+      manual: activeCars.filter(c => c.transmission === 'manual').length,
+    };
+  }, [activeCars]);
 
   // Available locations
   const locations = [
@@ -146,11 +191,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
         }
 
         // City match
-        if (location && location !== 'All Morocco' && car.city.toLowerCase() !== location.toLowerCase()) {
+        if (location && location !== 'All Morocco' && car.city?.toLowerCase() !== location.toLowerCase()) {
           return false;
         }
         // Category match
-        if (selectedCategory !== 'All' && car.category !== selectedCategory) {
+        if (selectedCategory !== 'All' && car.category?.toLowerCase() !== selectedCategory.toLowerCase()) {
           return false;
         }
         // Transmission match
@@ -161,8 +206,12 @@ export const SearchView: React.FC<SearchViewProps> = ({
         if (selectedFuel !== 'all' && car.fuel !== selectedFuel) {
           return false;
         }
-        // Price match
-        if (car.dailyRate > maxPriceFilter) {
+        // Price match (min & max daily rate)
+        if (car.dailyRate < minPriceFilter || car.dailyRate > maxPriceFilter) {
+          return false;
+        }
+        // Seats match
+        if (selectedSeats !== 'any' && car.seats < Number(selectedSeats)) {
           return false;
         }
         return true;
@@ -173,12 +222,24 @@ export const SearchView: React.FC<SearchViewProps> = ({
         if (sortBy === 'rating') return b.rating - a.rating;
         return b.reviewsCount - a.reviewsCount;
       });
-  }, [activeCars, searchQuery, location, selectedCategory, selectedTransmission, selectedFuel, maxPriceFilter, sortBy]);
+  }, [activeCars, searchQuery, location, selectedCategory, selectedTransmission, selectedFuel, minPriceFilter, maxPriceFilter, selectedSeats, sortBy]);
 
   // Active filter count
-  const activeFiltersCount = (selectedTransmission !== 'all' ? 1 : 0) + 
-                            (selectedFuel !== 'all' ? 1 : 0) + 
-                            (maxPriceFilter < 3000 ? 1 : 0);
+  const activeFiltersCount = 
+    (selectedCategory !== 'All' ? 1 : 0) + 
+    (selectedTransmission !== 'all' ? 1 : 0) + 
+    (selectedFuel !== 'all' ? 1 : 0) + 
+    (selectedSeats !== 'any' ? 1 : 0) + 
+    (minPriceFilter > priceBounds.min || maxPriceFilter < priceBounds.max ? 1 : 0);
+
+  const handleResetFilters = () => {
+    setSelectedCategory('All');
+    setSelectedTransmission('all');
+    setSelectedFuel('all');
+    setSelectedSeats('any');
+    setMinPriceFilter(priceBounds.min);
+    setMaxPriceFilter(priceBounds.max);
+  };
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-[#1a1412] font-sans selection:bg-[#f95721] selection:text-white">
@@ -349,20 +410,33 @@ export const SearchView: React.FC<SearchViewProps> = ({
               </button>
             ))}
 
-            {/* Advanced Filters Button */}
+            {/* Toggle Filters Sidebar Button */}
             <button
               type="button"
-              onClick={() => setIsFilterModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-full bg-[#FAF8F5] hover:bg-[#EDE6DC] border border-[#E0D7CC] text-xs font-semibold text-[#1a1412] flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                  setIsMobileFilterDrawerOpen(true);
+                } else {
+                  setIsSidebarOpen(!isSidebarOpen);
+                }
+              }}
+              className={`px-3.5 py-1.5 rounded-full border text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-all ${
+                isSidebarOpen
+                  ? 'bg-[#1a1412] text-white border-[#1a1412] shadow-xs'
+                  : 'bg-[#FAF8F5] hover:bg-[#EDE6DC] border-[#E0D7CC] text-[#1a1412]'
+              }`}
             >
-              <SlidersHorizontal className="w-3 h-3 text-[#f95721]" />
-              <span>Filters</span>
+              {isSidebarOpen ? (
+                <PanelLeftClose className="w-3.5 h-3.5 text-[#f95721]" />
+              ) : (
+                <PanelLeftOpen className="w-3.5 h-3.5 text-[#f95721]" />
+              )}
+              <span>{isSidebarOpen ? 'Hide Filters' : 'Filter Fleet'}</span>
               {activeFiltersCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-[#f95721] text-white text-[10px] font-bold flex items-center justify-center">
                   {activeFiltersCount}
                 </span>
               )}
-              <ChevronDown className="w-3 h-3 text-[#8C7E74]" />
             </button>
           </div>
 
@@ -392,7 +466,7 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
                   viewLayout === 'map' ? 'bg-[#1a1412] text-white shadow-xs' : 'text-[#6B5E55] hover:text-[#1a1412]'
                 }`}
-                title="Full Screen Map View"
+                title="Full Screen Map View with Filter Sidebar"
               >
                 <Map className="w-3.5 h-3.5" />
                 <span>Full Map</span>
@@ -430,13 +504,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </div>
 
         {/* Applied Filter Tags */}
-        <div className="max-w-7xl mx-auto flex items-center gap-2 mt-3 pt-2 border-t border-[#EAE3D9] text-xs">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2 mt-3 pt-2 border-t border-[#EAE3D9] text-xs">
           <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F2ECE4] border border-[#E0D7CC] text-[#3D332D]">
             <MapPin className="w-3 h-3 text-[#f95721]" />
             <span>{location}</span>
             <button 
               type="button" 
-              onClick={() => setLocation('')}
+              onClick={() => setLocation('All Morocco')}
               className="text-[#8C7E74] hover:text-[#1a1412] ml-1 cursor-pointer font-bold"
             >
               ×
@@ -456,58 +530,143 @@ export const SearchView: React.FC<SearchViewProps> = ({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => {
-              setLocation('Tetouan');
-              setSelectedCategory('All');
-              setSelectedTransmission('all');
-              setSelectedFuel('all');
-              setMaxPriceFilter(3000);
-            }}
-            className="text-[#f95721] hover:underline text-xs font-semibold ml-2 cursor-pointer"
-          >
-            Clear all
-          </button>
+          {selectedTransmission !== 'all' && (
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F2ECE4] border border-[#E0D7CC] text-[#3D332D]">
+              <span className="capitalize">Trans: {selectedTransmission}</span>
+              <button 
+                type="button" 
+                onClick={() => setSelectedTransmission('all')}
+                className="text-[#8C7E74] hover:text-[#1a1412] ml-1 cursor-pointer font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {(minPriceFilter > priceBounds.min || maxPriceFilter < priceBounds.max) && (
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F2ECE4] border border-[#E0D7CC] text-[#3D332D]">
+              <span>Price: {minPriceFilter} - {maxPriceFilter} DH</span>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setMinPriceFilter(priceBounds.min);
+                  setMaxPriceFilter(priceBounds.max);
+                }}
+                className="text-[#8C7E74] hover:text-[#1a1412] ml-1 cursor-pointer font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {selectedFuel !== 'all' && (
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F2ECE4] border border-[#E0D7CC] text-[#3D332D]">
+              <span className="capitalize">Fuel: {selectedFuel}</span>
+              <button 
+                type="button" 
+                onClick={() => setSelectedFuel('all')}
+                className="text-[#8C7E74] hover:text-[#1a1412] ml-1 cursor-pointer font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {activeFiltersCount > 0 && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="text-[#f95721] hover:underline text-xs font-semibold ml-2 cursor-pointer flex items-center gap-1"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Clear all</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── 3. MAIN CONTENT: SPLIT VIEW, FULL MAP, OR LIST VIEW ── */}
+      {/* ── 3. MAIN CONTENT: SIDEBAR + SPLIT VIEW, FULL MAP, OR LIST VIEW ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         
         {/* Mobile View Switcher (< lg screens) */}
-        <div className="lg:hidden flex items-center justify-center p-1 rounded-2xl bg-white border border-[#E0D7CC] shadow-xs mb-4">
+        <div className="lg:hidden flex items-center justify-between gap-2 mb-4">
+          <div className="flex-1 flex items-center p-1 rounded-2xl bg-white border border-[#E0D7CC] shadow-xs">
+            <button
+              type="button"
+              onClick={() => setViewLayout('list')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                viewLayout === 'list' || viewLayout === 'split' ? 'bg-[#1a1412] text-white shadow-xs' : 'text-[#6B5E55] hover:text-[#1a1412]'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>List ({filteredCars.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewLayout('map')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                viewLayout === 'map' ? 'bg-[#f95721] text-white shadow-xs' : 'text-[#6B5E55] hover:text-[#1a1412]'
+              }`}
+            >
+              <Map className="w-3.5 h-3.5" />
+              <span>Map ({filteredCars.length})</span>
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={() => setViewLayout('list')}
-            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              viewLayout === 'list' || viewLayout === 'split' ? 'bg-[#1a1412] text-white shadow-xs' : 'text-[#6B5E55] hover:text-[#1a1412]'
-            }`}
+            onClick={() => setIsMobileFilterDrawerOpen(true)}
+            className="py-2.5 px-3.5 rounded-2xl bg-white border border-[#E0D7CC] text-xs font-bold text-[#1a1412] flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all shrink-0"
           >
-            <List className="w-3.5 h-3.5" />
-            <span>Vehicles List ({filteredCars.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewLayout('map')}
-            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              viewLayout === 'map' ? 'bg-[#f95721] text-white shadow-xs' : 'text-[#6B5E55] hover:text-[#1a1412]'
-            }`}
-          >
-            <Map className="w-3.5 h-3.5" />
-            <span>Interactive Map ({filteredCars.length})</span>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#f95721]" />
+            <span>Filters</span>
+            {activeFiltersCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-[#f95721] text-white text-[10px] font-bold flex items-center justify-center">
+                {activeFiltersCount}
+              </span>
+            )}
           </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* Left Column: Car Cards List */}
+          {/* ── DESKTOP FILTERING SIDEBAR (lg:col-span-3) ── */}
+          {isSidebarOpen && (
+            <div className="hidden lg:block lg:col-span-3 transition-all duration-300">
+              <SearchFilterSidebar
+                categories={categories}
+                categoryCounts={categoryCounts}
+                selectedCategory={selectedCategory}
+                onSelectCategory={setSelectedCategory}
+                selectedTransmission={selectedTransmission}
+                onSelectTransmission={setSelectedTransmission}
+                transmissionCounts={transmissionCounts}
+                minPrice={minPriceFilter}
+                maxPrice={maxPriceFilter}
+                priceBounds={priceBounds}
+                onChangePriceRange={(min, max) => {
+                  setMinPriceFilter(min);
+                  setMaxPriceFilter(max);
+                }}
+                selectedFuel={selectedFuel}
+                onSelectFuel={setSelectedFuel}
+                selectedSeats={selectedSeats}
+                onSelectSeats={setSelectedSeats}
+                onResetFilters={handleResetFilters}
+                activeFiltersCount={activeFiltersCount}
+                totalResults={filteredCars.length}
+                onCollapseSidebar={() => setIsSidebarOpen(false)}
+              />
+            </div>
+          )}
+
+          {/* ── CAR CARDS LIST COLUMN ── */}
           <div className={`${
             viewLayout === 'map' 
               ? 'hidden' 
               : viewLayout === 'list' 
-                ? 'col-span-1 lg:col-span-12 space-y-4' 
-                : 'col-span-1 lg:col-span-7 space-y-4'
+                ? isSidebarOpen ? 'col-span-1 lg:col-span-9 space-y-4' : 'col-span-1 lg:col-span-12 space-y-4' 
+                : isSidebarOpen ? 'col-span-1 lg:col-span-4 xl:col-span-4 space-y-4' : 'col-span-1 lg:col-span-6 space-y-4'
           }`}>
             {/* Live Search & Firestore Sync Header */}
             <div className="flex flex-wrap items-center justify-between gap-2 pb-1 px-1">
@@ -517,10 +676,21 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 {searchQuery ? ` matching "${searchQuery}"` : ''}
               </div>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <span>Connected to Cloud Firestore ({activeCars.length} live fleet)</span>
-              </div>
+              {!isSidebarOpen && (
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-[#FAF8F5] border border-[#E0D7CC] text-xs font-semibold text-[#1a1412] cursor-pointer shadow-xs transition-all"
+                >
+                  <PanelLeftOpen className="w-3.5 h-3.5 text-[#f95721]" />
+                  <span>Open Filters</span>
+                  {activeFiltersCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-[#f95721] text-white text-[10px] font-bold flex items-center justify-center">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
 
             {filteredCars.length === 0 ? (
@@ -528,16 +698,11 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 <div className="text-3xl">🚗</div>
                 <h3 className="font-serif-display text-xl font-bold text-[#1a1412]">No cars found matching filters</h3>
                 <p className="text-xs text-[#6B5E55]">
-                  Try clearing your filters or selecting another city like Casablanca or Marrakech.
+                  Try widening your price range, choosing another vehicle category, or selecting All Morocco.
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedCategory('All');
-                    setSelectedTransmission('all');
-                    setSelectedFuel('all');
-                    setMaxPriceFilter(3000);
-                  }}
+                  onClick={handleResetFilters}
                   className="px-4 py-2 rounded-full bg-[#f95721] text-white text-xs font-bold cursor-pointer shadow-sm hover:bg-[#e04816] transition-all"
                 >
                   Reset all filters
@@ -565,10 +730,10 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         : 'border-[#EAE3D9] hover:border-[#D6CCC0]'
                     }`}
                   >
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 p-4">
+                    <div className="flex flex-col sm:flex-row gap-3.5 p-3.5">
                       
                       {/* Vehicle Image with Favorite Heart */}
-                      <div className="sm:col-span-5 relative rounded-xl overflow-hidden bg-[#F7F4EE] aspect-16/10 sm:aspect-auto sm:h-44">
+                      <div className="sm:w-36 md:w-40 xl:w-44 h-32 sm:h-auto rounded-xl overflow-hidden bg-[#F7F4EE] relative shrink-0">
                         <img
                           src={car.images[0]}
                           alt={car.name}
@@ -577,33 +742,33 @@ export const SearchView: React.FC<SearchViewProps> = ({
                         <button
                           type="button"
                           onClick={(e) => toggleFavorite(car.id, e)}
-                          className="absolute top-2.5 right-2.5 p-2 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-xs text-white transition-all cursor-pointer"
+                          className="absolute top-2 right-2 p-1.5 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-xs text-white transition-all cursor-pointer"
                         >
-                          <Heart className={`w-4 h-4 ${isFav ? 'fill-[#f95721] text-[#f95721]' : 'text-white'}`} />
+                          <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-[#f95721] text-[#f95721]' : 'text-white'}`} />
                         </button>
                       </div>
 
                       {/* Vehicle Details */}
-                      <div className="sm:col-span-7 flex flex-col justify-between space-y-3">
+                      <div className="flex-1 min-w-0 flex flex-col justify-between space-y-2">
                         
                         <div>
                           {/* Title and Rating */}
-                          <div className="flex items-start justify-between gap-2">
-                            <h3 className="font-serif-display font-bold text-lg text-[#1a1412] group-hover:text-[#f95721] transition-colors leading-tight">
+                          <div className="flex items-start justify-between gap-1.5">
+                            <h3 className="font-serif-display font-bold text-base text-[#1a1412] group-hover:text-[#f95721] transition-colors leading-tight truncate">
                               {car.name}
                             </h3>
                             <div className="flex items-center gap-1 text-xs font-semibold text-amber-500 shrink-0">
                               <span>★</span>
-                              <span>{car.rating.toFixed(1)}</span>
-                              <span className="text-[#8C7E74] font-normal">({car.reviewsCount})</span>
+                              <span>{car.rating > 0 ? car.rating.toFixed(1) : '5.0'}</span>
+                              <span className="text-[#8C7E74] font-normal text-[11px]">({car.reviewsCount})</span>
                             </div>
                           </div>
 
                           {/* Location & Agency Badge */}
-                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                            <div className="flex items-center gap-1 text-xs text-[#6B5E55]">
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-[#6B5E55]">
+                            <div className="flex items-center gap-1">
                               <MapPin className="w-3 h-3 text-[#f95721]" />
-                              <span>{car.location}</span>
+                              <span className="truncate">{car.location}</span>
                             </div>
 
                             <span className="text-[#C4B9AC]">·</span>
@@ -618,46 +783,45 @@ export const SearchView: React.FC<SearchViewProps> = ({
                                   onNavigateTab('partner-profile');
                                 }
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FAF8F5] hover:bg-[#F2ECE4] border border-[#E0D7CC] hover:border-[#f95721]/60 text-[11px] text-[#3D332D] hover:text-[#1a1412] transition-all cursor-pointer group/agency"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-[#FAF8F5] hover:bg-[#F2ECE4] border border-[#E0D7CC] hover:border-[#f95721]/60 text-[10px] text-[#3D332D] hover:text-[#1a1412] transition-all cursor-pointer truncate"
                               title="View partner agency profile"
                             >
                               <span className="w-1.5 h-1.5 rounded-full bg-[#f95721]"></span>
-                              <span className="group-hover/agency:text-[#f95721] transition-colors">{car.agency.name}</span>
-                              <ArrowRight className="w-2.5 h-2.5 text-[#8C7E74] group-hover/agency:translate-x-0.5 transition-transform" />
+                              <span className="truncate">{car.agency.name}</span>
                             </button>
                           </div>
 
                           {/* Specifications Icons */}
-                          <div className="flex items-center gap-3 text-xs text-[#6B5E55] mt-2.5">
+                          <div className="flex items-center gap-2.5 text-[11px] text-[#6B5E55] mt-2">
                             <div className="flex items-center gap-1">
-                              <Users className="w-3.5 h-3.5 text-[#8C7E74]" />
-                              <span>{car.seats}</span>
+                              <Users className="w-3 h-3 text-[#8C7E74]" />
+                              <span>{car.seats}s</span>
                             </div>
                             <div className="flex items-center gap-1">
-                              <span className="text-[#8C7E74] font-mono text-[11px]">⚙</span>
+                              <span className="text-[#8C7E74] font-mono text-[10px]">⚙</span>
                               <span className="capitalize">{car.transmission}</span>
                             </div>
                             <div className="flex items-center gap-1">
-                              <Fuel className="w-3.5 h-3.5 text-[#8C7E74]" />
+                              <Fuel className="w-3 h-3 text-[#8C7E74]" />
                               <span className="capitalize">{car.fuel}</span>
                             </div>
                           </div>
                         </div>
 
                         {/* Price Breakdown and CTA */}
-                        <div className="pt-3 border-t border-[#EAE3D9] flex items-end justify-between">
+                        <div className="pt-2 border-t border-[#EAE3D9] flex items-end justify-between">
                           <div>
-                            <div className="font-serif-display font-extrabold text-xl text-[#1a1412] tracking-tight">
-                              {totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {car.currency}
+                            <div className="font-serif-display font-extrabold text-base sm:text-lg text-[#1a1412] tracking-tight">
+                              {totalPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} {car.currency}
                             </div>
-                            <div className="text-[11px] text-[#8C7E74]">
-                              {rentalDays} days · {car.dailyRate.toFixed(2)} {car.currency}/day
+                            <div className="text-[10px] text-[#8C7E74]">
+                              {rentalDays} days · {car.dailyRate.toFixed(0)} {car.currency}/day
                             </div>
                           </div>
 
                           <div className="flex items-center gap-1 text-xs font-bold text-[#f95721] group-hover:translate-x-1 transition-transform">
-                            <span>View Details</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
+                            <span>View</span>
+                            <ArrowRight className="w-3 h-3" />
                           </div>
                         </div>
 
@@ -670,13 +834,13 @@ export const SearchView: React.FC<SearchViewProps> = ({
             )}
           </div>
 
-          {/* Right Column: Interactive Leaflet Map */}
+          {/* ── RIGHT COLUMN: INTERACTIVE LEAFLET MAP WITH MARKER CLUSTERING ── */}
           <div className={`${
             viewLayout === 'list' 
               ? 'hidden' 
               : viewLayout === 'map' 
-                ? 'col-span-1 lg:col-span-12' 
-                : 'col-span-1 lg:col-span-5 sticky top-24'
+                ? isSidebarOpen ? 'col-span-1 lg:col-span-9' : 'col-span-1 lg:col-span-12' 
+                : isSidebarOpen ? 'col-span-1 lg:col-span-5 xl:col-span-5 sticky top-24' : 'col-span-1 lg:col-span-6 sticky top-24'
           }`}>
             <SearchMapView
               cars={filteredCars}
@@ -694,138 +858,70 @@ export const SearchView: React.FC<SearchViewProps> = ({
         </div>
 
         {/* Mobile Floating Action Button to toggle between List & Map */}
-        <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+        <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2">
           <button
             type="button"
             onClick={() => setViewLayout(viewLayout === 'map' ? 'list' : 'map')}
-            className="px-5 py-2.5 rounded-full bg-[#1a1412] hover:bg-[#f95721] text-white text-xs font-bold shadow-2xl flex items-center gap-2 border border-white/20 active:scale-95 transition-all cursor-pointer backdrop-blur-md"
+            className="px-4 py-2.5 rounded-full bg-[#1a1412] hover:bg-black text-white text-xs font-bold shadow-2xl flex items-center gap-1.5 border border-white/20 active:scale-95 transition-all cursor-pointer backdrop-blur-md"
           >
             {viewLayout === 'map' ? (
               <>
-                <List className="w-4 h-4 text-[#f95721]" />
-                <span>Show Vehicles List ({filteredCars.length})</span>
+                <List className="w-3.5 h-3.5 text-[#f95721]" />
+                <span>List ({filteredCars.length})</span>
               </>
             ) : (
               <>
-                <Map className="w-4 h-4 text-[#f95721]" />
-                <span>Show Fleet Map ({filteredCars.length})</span>
+                <Map className="w-3.5 h-3.5 text-[#f95721]" />
+                <span>Map ({filteredCars.length})</span>
               </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsMobileFilterDrawerOpen(true)}
+            className="px-4 py-2.5 rounded-full bg-[#f95721] hover:bg-[#e04816] text-white text-xs font-bold shadow-2xl flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filters</span>
+            {activeFiltersCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-white text-[#f95721] text-[10px] font-extrabold flex items-center justify-center">
+                {activeFiltersCount}
+              </span>
             )}
           </button>
         </div>
       </div>
 
-      {/* ── 4. FILTER MODAL DRAWER ── */}
-      {isFilterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white border border-[#E0D7CC] rounded-3xl w-full max-w-lg p-6 space-y-6 shadow-2xl text-[#1a1412]">
-            <div className="flex items-center justify-between border-b border-[#EAE3D9] pb-4">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-[#f95721]" />
-                <h3 className="font-serif-display font-bold text-lg text-[#1a1412]">Filter Vehicles</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsFilterModalOpen(false)}
-                className="p-1 rounded-full hover:bg-[#FAF8F5] text-[#8C7E74] hover:text-[#1a1412] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Transmission */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-[#6B5E55]">
-                Transmission
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['all', 'automatic', 'manual'] as const).map((trans) => (
-                  <button
-                    key={trans}
-                    type="button"
-                    onClick={() => setSelectedTransmission(trans)}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold capitalize border transition-all cursor-pointer ${
-                      selectedTransmission === trans
-                        ? 'bg-[#f95721] text-white border-[#f95721]'
-                        : 'bg-[#FAF8F5] text-[#4A3E37] border-[#E0D7CC] hover:bg-[#EDE6DC]'
-                    }`}
-                  >
-                    {trans}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Fuel Type */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-[#6B5E55]">
-                Fuel Type
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['all', 'gasoline', 'diesel'] as const).map((fuel) => (
-                  <button
-                    key={fuel}
-                    type="button"
-                    onClick={() => setSelectedFuel(fuel)}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold capitalize border transition-all cursor-pointer ${
-                      selectedFuel === fuel
-                        ? 'bg-[#f95721] text-white border-[#f95721]'
-                        : 'bg-[#FAF8F5] text-[#4A3E37] border-[#E0D7CC] hover:bg-[#EDE6DC]'
-                    }`}
-                  >
-                    {fuel}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Max Daily Rate Slider */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <label className="font-bold uppercase tracking-wider text-[#6B5E55]">
-                  Maximum Daily Rate
-                </label>
-                <span className="font-mono font-bold text-[#f95721]">
-                  {maxPriceFilter} DH / day
-                </span>
-              </div>
-              <input
-                type="range"
-                min={300}
-                max={3000}
-                step={50}
-                value={maxPriceFilter}
-                onChange={(e) => setMaxPriceFilter(Number(e.target.value))}
-                className="w-full accent-[#f95721] cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] text-[#8C7E74] font-mono">
-                <span>300 DH</span>
-                <span>1,500 DH</span>
-                <span>3,000 DH</span>
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-4 border-t border-[#EAE3D9]">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTransmission('all');
-                  setSelectedFuel('all');
-                  setMaxPriceFilter(3000);
-                }}
-                className="text-xs text-[#8C7E74] hover:text-[#1a1412] underline cursor-pointer"
-              >
-                Reset filters
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsFilterModalOpen(false)}
-                className="px-6 py-2.5 rounded-full bg-[#f95721] hover:bg-[#e04816] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-              >
-                Apply Filters ({filteredCars.length} results)
-              </button>
-            </div>
+      {/* ── 4. MOBILE / DRAWER FILTER MODAL ── */}
+      {isMobileFilterDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs p-0 sm:p-4">
+          <div className="w-full sm:max-w-md max-h-[92vh] sm:rounded-3xl rounded-t-3xl overflow-hidden shadow-2xl bg-white">
+            <SearchFilterSidebar
+              categories={categories}
+              categoryCounts={categoryCounts}
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+              selectedTransmission={selectedTransmission}
+              onSelectTransmission={setSelectedTransmission}
+              transmissionCounts={transmissionCounts}
+              minPrice={minPriceFilter}
+              maxPrice={maxPriceFilter}
+              priceBounds={priceBounds}
+              onChangePriceRange={(min, max) => {
+                setMinPriceFilter(min);
+                setMaxPriceFilter(max);
+              }}
+              selectedFuel={selectedFuel}
+              onSelectFuel={setSelectedFuel}
+              selectedSeats={selectedSeats}
+              onSelectSeats={setSelectedSeats}
+              onResetFilters={handleResetFilters}
+              activeFiltersCount={activeFiltersCount}
+              totalResults={filteredCars.length}
+              isMobileDrawer={true}
+              onCloseMobileDrawer={() => setIsMobileFilterDrawerOpen(false)}
+            />
           </div>
         </div>
       )}
@@ -833,3 +929,4 @@ export const SearchView: React.FC<SearchViewProps> = ({
     </div>
   );
 };
+

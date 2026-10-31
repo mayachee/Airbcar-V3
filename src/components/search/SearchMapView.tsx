@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
+import 'leaflet.markercluster';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { 
   Layers, 
   LocateFixed, 
@@ -100,6 +103,7 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const markersRef = useRef<{ [key: string]: L.Marker }>({});
   
   // Stable ref for onSelectCar to prevent unnecessary marker re-renders
@@ -239,6 +243,45 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
     tileLayerRef.current = tileLayer;
     mapInstanceRef.current = map;
 
+    // Initialize Leaflet Marker Cluster Group
+    const clusterGroup = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      spiderfyOnMaxZoom: true,
+      removeOutsideVisibleBounds: true,
+      animateAddingMarkers: true,
+      disableClusteringAtZoom: 16,
+      maxClusterRadius: 45,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        const size = count >= 20 ? 52 : count >= 8 ? 44 : 38;
+        return L.divIcon({
+          html: `
+            <div class="airbcar-cluster-marker select-none cursor-pointer transition-transform duration-200 hover:scale-110">
+              <div class="relative flex items-center justify-center" style="width: ${size}px; height: ${size}px;">
+                <div class="absolute inset-0 rounded-full bg-[#f95721] opacity-25 animate-ping"></div>
+                <div class="relative w-full h-full rounded-full bg-white border-2 border-[#f95721] shadow-lg shadow-[#f95721]/30 flex items-center justify-center p-0.5">
+                  <div class="w-full h-full rounded-full bg-gradient-to-br from-[#f95721] to-[#e04816] text-white flex items-center justify-center gap-0.5 shadow-inner">
+                    <span class="text-[10px]">🚗</span>
+                    <span class="font-extrabold text-xs leading-none">${count}</span>
+                  </div>
+                </div>
+                <div class="absolute -bottom-1.5 px-1.5 py-0.2 rounded-full bg-[#1a1412] text-white text-[8px] font-bold tracking-wider uppercase shadow-xs">
+                  Hub
+                </div>
+              </div>
+            </div>
+          `,
+          className: 'airbcar-cluster-icon',
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+      }
+    });
+
+    map.addLayer(clusterGroup);
+    clusterGroupRef.current = clusterGroup;
+
     // Observe container resize & invalidate size smoothly
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
@@ -263,6 +306,14 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
       clearTimeout(t3);
       if (resizeObserver) {
         resizeObserver.disconnect();
+      }
+      if (clusterGroupRef.current) {
+        try {
+          clusterGroupRef.current.clearLayers();
+        } catch {
+          // ignore
+        }
+        clusterGroupRef.current = null;
       }
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
@@ -321,7 +372,14 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
     const carsChanged = currentFingerprint !== prevCarsFingerprintRef.current;
     const cityChanged = city !== prevCityRef.current;
 
-    // Clear old markers
+    // Clear old markers from cluster group and tracking map
+    if (clusterGroupRef.current) {
+      try {
+        clusterGroupRef.current.clearLayers();
+      } catch {
+        // safe ignore
+      }
+    }
     (Object.values(markersRef.current) as L.Marker[]).forEach((marker) => {
       try {
         marker.remove();
@@ -334,6 +392,8 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
     // Filter cars with valid coordinates
     const validCars = cars.filter((c) => c.coordinates && typeof c.coordinates.lat === 'number' && typeof c.coordinates.lng === 'number');
 
+    const createdMarkers: L.Marker[] = [];
+
     validCars.forEach((car) => {
       const isSelected = selectedCarId === car.id;
       const isHovered = hoveredCarId === car.id;
@@ -343,7 +403,7 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
         icon,
         zIndexOffset: isSelected || isHovered ? 1000 : 100,
         title: `${car.name} - ${car.dailyRate} DH/day`
-      }).addTo(map);
+      });
 
       marker.on('click', () => {
         setActivePreviewCar(car);
@@ -358,7 +418,13 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
       });
 
       markersRef.current[car.id] = marker;
+      createdMarkers.push(marker);
     });
+
+    // Add all markers to the cluster group
+    if (clusterGroupRef.current && createdMarkers.length > 0) {
+      clusterGroupRef.current.addLayers(createdMarkers);
+    }
 
     // Auto-fit or pan view to vehicles ONLY when the fleet or city has actually changed
     if (carsChanged || cityChanged) {
@@ -399,11 +465,24 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
       marker.setZIndexOffset(isSelected || isHovered ? 1000 : 100);
     });
 
-    const targetId = hoveredCarId || selectedCarId;
+    const targetId = selectedCarId || hoveredCarId;
     if (targetId) {
       const found = cars.find((c) => c.id === targetId);
       if (found) {
         setActivePreviewCar(found);
+      }
+      // If marker is in a cluster, smoothly zoom or spiderfy to reveal it
+      const targetMarker = markersRef.current[targetId];
+      if (targetMarker && clusterGroupRef.current) {
+        try {
+          clusterGroupRef.current.zoomToShowLayer(targetMarker, () => {
+            if (mapInstanceRef.current && targetMarker.getLatLng) {
+              mapInstanceRef.current.panTo(targetMarker.getLatLng(), { animate: true, duration: 0.4 });
+            }
+          });
+        } catch {
+          // ignore if already visible
+        }
       }
     }
   }, [selectedCarId, hoveredCarId, cars, createMarkerIcon]);
@@ -414,6 +493,22 @@ export const SearchMapView: React.FC<SearchMapViewProps> = ({
     const map = mapInstanceRef.current;
     setIsRefreshing(true);
     map.invalidateSize();
+
+    if (clusterGroupRef.current && clusterGroupRef.current.getLayers().length > 0) {
+      try {
+        const clusterBounds = clusterGroupRef.current.getBounds();
+        if (clusterBounds.isValid()) {
+          map.fitBounds(clusterBounds, { padding: [50, 50], maxZoom: 14, animate: true });
+          setTimeout(() => {
+            map.invalidateSize();
+            setIsRefreshing(false);
+          }, 400);
+          return;
+        }
+      } catch {
+        // fallback to manual bounds
+      }
+    }
 
     const validCars = cars.filter((c) => c.coordinates?.lat && c.coordinates?.lng);
     if (validCars.length > 1) {
