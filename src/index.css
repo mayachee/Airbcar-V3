@@ -1,0 +1,59 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+.font-serif-display {
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+.font-sans-ui {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Custom scrollbar for clean dashboard aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Leaflet Map Customizations */
+.leaflet-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-container {
+  background-color: #181311 !important;
+  font-family: inherit !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(24, 19, 17, 0.85) !important;
+  color: #8d7e73 !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.leaflet-control-attribution a {
+  color: #f95721 !important;
+  text-decoration: none !important;
+}
+
+

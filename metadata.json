@@ -1,0 +1,6 @@
+{
+  "name": "Airbcar",
+  "description": "Airbcar premium car rental portal and agency partner platform for vehicle fleet management, digital contracts, real-time messaging, and B2B car sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

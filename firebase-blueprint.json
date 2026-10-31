@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile for renters, agency partners, and admins",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "role": { "type": "string", "enum": ["renter", "partner", "admin"] },
+        "phone": { "type": "string" },
+        "cin": { "type": "string" },
+        "drivingLicenceNumber": { "type": "string" },
+        "agencyName": { "type": "string" },
+        "verified": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Car rental reservation under Moroccan Dahir 2026 regulations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "renterId": { "type": "string" },
+        "renterName": { "type": "string" },
+        "carId": { "type": "string" },
+        "carTitle": { "type": "string" },
+        "carCategory": { "type": "string" },
+        "carImage": { "type": "string" },
+        "pickupDate": { "type": "string" },
+        "returnDate": { "type": "string" },
+        "pickupCity": { "type": "string" },
+        "totalDays": { "type": "number" },
+        "pricePerDay": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "depositAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "active", "completed", "cancelled"] },
+        "dahirRegistrationId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "renterId", "carId", "pickupDate", "returnDate", "totalPrice", "status"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "Dahir 2026 digital rental contract and digital signature",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookingId": { "type": "string" },
+        "renterId": { "type": "string" },
+        "renterName": { "type": "string" },
+        "carModel": { "type": "string" },
+        "contractNumber": { "type": "string" },
+        "digitalSignature": { "type": "string" },
+        "cinNumber": { "type": "string" },
+        "drivingLicenceNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "signed", "active", "closed"] },
+        "signedAt": { "type": "string" }
+      },
+      "required": ["id", "bookingId", "renterId", "status"]
+    },
+    "Car": {
+      "title": "Car",
+      "description": "Vehicle listed for rental in Morocco",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "year": { "type": "number" },
+        "pricePerDay": { "type": "number" },
+        "city": { "type": "string" },
+        "transmission": { "type": "string" },
+        "fuelType": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "rating": { "type": "number" },
+        "agencyName": { "type": "string" },
+        "agencyId": { "type": "string" },
+        "isAvailable": { "type": "boolean" }
+      },
+      "required": ["id", "title", "pricePerDay", "city"]
+    },
+    "Dispute": {
+      "title": "Dispute",
+      "description": "Dahir 2026 mediation claims and deposit dispute tickets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookingId": { "type": "string" },
+        "contractId": { "type": "string" },
+        "userId": { "type": "string" },
+        "reason": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "under_review", "resolved", "dismissed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "contractId", "userId", "reason", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat and dispute mediation messages between renters, partners, and support",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "conversationId", "senderId", "text"]
+    },
+    "PartnerProfile": {
+      "title": "PartnerProfile",
+      "description": "Rental agency partner profile with Dahir 2026 certification and 5 vehicles fleet",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "agencyName": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "cin": { "type": "string" },
+        "city": { "type": "string" },
+        "address": { "type": "string" },
+        "licenseNumber": { "type": "string" },
+        "vehicleCount": { "type": "number" },
+        "rating": { "type": "number" }
+      },
+      "required": ["id", "agencyName", "ownerName", "city"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile information"
+    },
+    "/partners/{partnerId}": {
+      "schema": { "$ref": "#/entities/PartnerProfile" },
+      "description": "Partner rental agencies across Morocco"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Rental bookings"
+    },
+    "/contracts/{contractId}": {
+      "schema": { "$ref": "#/entities/Contract" },
+      "description": "Dahir 2026 digital rental contracts"
+    },
+    "/cars/{carId}": {
+      "schema": { "$ref": "#/entities/Car" },
+      "description": "Available rental vehicles"
+    },
+    "/disputes/{disputeId}": {
+      "schema": { "$ref": "#/entities/Dispute" },
+      "description": "Mediation disputes under Dahir 2026"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Support and conversation messages"
+    }
+  }
+}

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Airbcar · Renter & Partner Fleet Platform</title>
+    <meta name="description" content="Airbcar premium car rental portal and agency partner platform for vehicle fleet management, digital contracts, real-time messaging, and B2B car sharing." />
+    <meta property="og:title" content="Airbcar · Renter & Partner Fleet Platform" />
+    <meta property="og:description" content="Airbcar premium car rental portal and agency partner platform for vehicle fleet management, digital contracts, real-time messaging, and B2B car sharing." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script>
+      // Early catch for OAuth popup callback to comply with AI Studio iframe constraints
+      if (window.location.pathname.startsWith('/auth/callback')) {
+        try {
+          const hash = window.location.hash.substring(1);
+          const search = window.location.search.substring(1);
+          const params = new URLSearchParams(hash || search);
+          const token = params.get('access_token') || params.get('id_token');
+          const code = params.get('code');
+          const error = params.get('error') || params.get('error_description');
+
+          if (error) {
+            try {
+              localStorage.setItem('airbcar_oauth_result', JSON.stringify({
+                type: 'OAUTH_AUTH_ERROR',
+                error: error,
+                timestamp: Date.now()
+              }));
+            } catch (_) {}
+            if (window.opener) {
+              window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: error }, '*');
+            }
+          } else if (token || code) {
+            try {
+              localStorage.setItem('airbcar_oauth_result', JSON.stringify({
+                type: 'OAUTH_AUTH_SUCCESS',
+                token: token,
+                code: code,
+                raw: window.location.href,
+                timestamp: Date.now()
+              }));
+            } catch (_) {}
+            if (window.opener) {
+              window.opener.postMessage({ 
+                type: 'OAUTH_AUTH_SUCCESS', 
+                token: token, 
+                code: code, 
+                raw: window.location.href 
+              }, '*');
+            }
+          }
+
+          if (window.opener) {
+            setTimeout(function() { window.close(); }, 300);
+          } else {
+            setTimeout(function() { window.location.href = '/'; }, 500);
+          }
+        } catch (e) {
+          console.error('OAuth callback processing error:', e);
+        }
+      }
+    </script>
+  </head>
+  <body class="bg-[#F7F4EE] text-[#1a1412] antialiased selection:bg-[#f95721] selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

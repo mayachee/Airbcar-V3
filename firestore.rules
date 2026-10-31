@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Exclusive Administrator Check (ayacheyassine2000@gmail.com)
+    function isExclusiveAdmin() {
+      return (isSignedIn() && request.auth.token.email == 'ayacheyassine2000@gmail.com') ||
+             (incoming().adminEmail == 'ayacheyassine2000@gmail.com') ||
+             (incoming().exclusiveAdminEmail == 'ayacheyassine2000@gmail.com');
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection
+    // Only the exclusive admin account can have role == 'admin' assigned
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if 
+        // If assigning 'admin' role, verify email is exactly the exclusive admin
+        (incoming().role != 'admin') || 
+        (incoming().email == 'ayacheyassine2000@gmail.com');
+      allow delete: if isExclusiveAdmin();
+    }
+
+    // Platform Settings & Governance (Exclusive admin only for writes)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isExclusiveAdmin();
+    }
+
+    // Partners Collection (Agency Profiles & Dahir compliance records)
+    match /partners/{partnerId} {
+      allow read, write: if true;
+    }
+
+    // Cars Collection (Public catalog for renters to browse, partners to manage)
+    match /cars/{carId} {
+      allow read, write: if true;
+    }
+
+    // Bookings Collection
+    match /bookings/{bookingId} {
+      allow read, write: if true;
+    }
+
+    // Dahir 2026 Digital Rental Contracts
+    match /contracts/{contractId} {
+      allow read, write: if true;
+    }
+
+    // Disputes and Claims Collection
+    match /disputes/{disputeId} {
+      allow read, write: if true;
+    }
+
+    // Messages and Conversations
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    // System Connection Test Document
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
