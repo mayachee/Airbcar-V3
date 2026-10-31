@@ -40,6 +40,7 @@ interface BookingFlowModalProps {
     dates: string;
     totalAmount: number;
     contractNumber: string;
+    paymentMethod?: string;
   }) => void;
   onOpenPdfModal?: () => void;
   onUpdateProfile?: (profile: UserProfile) => void;
@@ -65,6 +66,7 @@ export const BookingFlowModal: React.FC<BookingFlowModalProps> = ({
   const [hasSecondDriver, setHasSecondDriver] = useState(userProfile.hasSecondDriver || false);
   const [secondDriverName, setSecondDriverName] = useState(userProfile.secondDriverName || '');
   const [secondDriverLicence, setSecondDriverLicence] = useState(userProfile.secondDriverLicence || '');
+  const [paymentMethod, setPaymentMethod] = useState<'cmi' | 'cash' | 'wafacash' | 'apple_pay'>('cmi');
 
   // Step 2: Strict Front & Back Driver License Validation
   const frontInputRef = useRef<HTMLInputElement>(null);
@@ -258,11 +260,17 @@ export const BookingFlowModal: React.FC<BookingFlowModalProps> = ({
     if (!agreedToContract || !agreedToEscrow || !signatureText.trim()) {
       return;
     }
+    const paymentLabel = 
+      paymentMethod === 'cmi' ? 'Carte Bancaire CMI (3D Secure)' :
+      paymentMethod === 'cash' ? 'Espèces à la Prise en Charge' :
+      paymentMethod === 'wafacash' ? 'Virement CashPlus / Wafacash' : 'Apple Pay';
+
     onBookingSuccess({
       car,
       dates: `${pickupDate} to ${returnDate}`,
       totalAmount,
       contractNumber,
+      paymentMethod: paymentLabel,
     });
     setCurrentStep(4);
   };
@@ -510,6 +518,89 @@ export const BookingFlowModal: React.FC<BookingFlowModalProps> = ({
                     <div className="text-xs font-bold text-[#1a1412]">Zero Excess Peace</div>
                     <div className="text-[10px] text-[#6e5d53] mt-1">0 MAD Deductible · Full Escrow Shield</div>
                     <div className="text-xs font-semibold text-amber-700 mt-2">+120 MAD / day</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Moroccan Payment Method Selector */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[#1a1412] uppercase tracking-wider flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4 text-[#c43b0d]" />
+                    Mode de Règlement (Morocco Payment Options)
+                  </label>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
+                    Dahir 2026 Escrow Protected
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('cmi')}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer shadow-2xs ${
+                      paymentMethod === 'cmi'
+                        ? 'bg-[#FAF2EC] border-[#c43b0d] ring-1 ring-[#c43b0d]/20 text-[#1a1412]'
+                        : 'bg-white border-[#EAE3D9] text-[#4a3b32] hover:border-[#b5a79c]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#1a1412]">Carte Bancaire CMI</span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">3D SECURE</span>
+                    </div>
+                    <div className="text-[10px] text-[#6e5d53] mt-1">Visa, Mastercard, Attijariwafa, BCP, BMCE, CIH</div>
+                    <div className="text-[11px] font-semibold text-[#c43b0d] mt-2">Zero frais de transaction</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('cash')}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer shadow-2xs ${
+                      paymentMethod === 'cash'
+                        ? 'bg-[#FAF2EC] border-[#c43b0d] ring-1 ring-[#c43b0d]/20 text-[#1a1412]'
+                        : 'bg-white border-[#EAE3D9] text-[#4a3b32] hover:border-[#b5a79c]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#1a1412]">Espèces au Comptoir</span>
+                      <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">MAD CASH</span>
+                    </div>
+                    <div className="text-[10px] text-[#6e5d53] mt-1">Paiement à la remise des clés avec reçu fiscal</div>
+                    <div className="text-[11px] font-semibold text-amber-700 mt-2">Prise en charge instantanée</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('wafacash')}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer shadow-2xs ${
+                      paymentMethod === 'wafacash'
+                        ? 'bg-[#FAF2EC] border-[#c43b0d] ring-1 ring-[#c43b0d]/20 text-[#1a1412]'
+                        : 'bg-white border-[#EAE3D9] text-[#4a3b32] hover:border-[#b5a79c]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#1a1412]">CashPlus / Wafacash</span>
+                      <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">RÉSEAU MAROC</span>
+                    </div>
+                    <div className="text-[10px] text-[#6e5d53] mt-1">Code de paiement dans 3,500 agences au Maroc</div>
+                    <div className="text-[11px] font-semibold text-blue-700 mt-2">Réservation garantie 2h</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('apple_pay')}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer shadow-2xs ${
+                      paymentMethod === 'apple_pay'
+                        ? 'bg-[#FAF2EC] border-[#c43b0d] ring-1 ring-[#c43b0d]/20 text-[#1a1412]'
+                        : 'bg-white border-[#EAE3D9] text-[#4a3b32] hover:border-[#b5a79c]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#1a1412]">Apple Pay / Google Pay</span>
+                      <span className="text-[9px] bg-neutral-100 text-neutral-800 font-bold px-1.5 py-0.5 rounded">1-TOUCH</span>
+                    </div>
+                    <div className="text-[10px] text-[#6e5d53] mt-1">Authentification biométrique instantanée</div>
+                    <div className="text-[11px] font-semibold text-emerald-700 mt-2">Empreinte caution sécurisée</div>
                   </button>
                 </div>
               </div>

@@ -138,7 +138,9 @@ export const launchOAuthPopup = (url: string): Promise<{ token?: string; code?: 
           }
           cleanup();
           if (!isResolved) {
-            reject(new Error('Sign-in window was closed before completing authentication.'));
+            const err = new Error('Sign-in window was closed before completing authentication.');
+            (err as any).code = 'auth/popup-closed-by-user';
+            reject(err);
           }
         }, 500);
       }

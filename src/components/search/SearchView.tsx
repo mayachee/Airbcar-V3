@@ -35,7 +35,7 @@ interface SearchViewProps {
 }
 
 export const SearchView: React.FC<SearchViewProps> = ({
-  initialLocation = 'Tetouan',
+  initialLocation = 'All Morocco',
   initialPickupDate = '2026-09-07',
   initialReturnDate = '2026-09-11',
   cars: externalCars,
@@ -120,6 +120,9 @@ export const SearchView: React.FC<SearchViewProps> = ({
     'Tangier',
     'Rabat',
     'Fes',
+    'Nador',
+    'Oujda',
+    'Meknes',
     'Chefchaouen',
     'Merzouga'
   ];
@@ -471,6 +474,31 @@ export const SearchView: React.FC<SearchViewProps> = ({
 
       {/* ── 3. MAIN CONTENT: SPLIT VIEW, FULL MAP, OR LIST VIEW ── */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        
+        {/* Mobile View Switcher (< lg screens) */}
+        <div className="lg:hidden flex items-center justify-center p-1 rounded-2xl bg-white border border-[#E0D7CC] shadow-xs mb-4">
+          <button
+            type="button"
+            onClick={() => setViewLayout('list')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              viewLayout === 'list' || viewLayout === 'split' ? 'bg-[#1a1412] text-white shadow-xs' : 'text-[#6B5E55] hover:text-[#1a1412]'
+            }`}
+          >
+            <List className="w-3.5 h-3.5" />
+            <span>Vehicles List ({filteredCars.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewLayout('map')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              viewLayout === 'map' ? 'bg-[#f95721] text-white shadow-xs' : 'text-[#6B5E55] hover:text-[#1a1412]'
+            }`}
+          >
+            <Map className="w-3.5 h-3.5" />
+            <span>Interactive Map ({filteredCars.length})</span>
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* Left Column: Car Cards List */}
@@ -658,10 +686,32 @@ export const SearchView: React.FC<SearchViewProps> = ({
                 setSelectedCarId(car.id);
                 onSelectCarDetails(car);
               }}
-              city={location || 'Tetouan'}
+              city={location || 'All Morocco'}
+              viewLayout={viewLayout}
             />
           </div>
 
+        </div>
+
+        {/* Mobile Floating Action Button to toggle between List & Map */}
+        <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <button
+            type="button"
+            onClick={() => setViewLayout(viewLayout === 'map' ? 'list' : 'map')}
+            className="px-5 py-2.5 rounded-full bg-[#1a1412] hover:bg-[#f95721] text-white text-xs font-bold shadow-2xl flex items-center gap-2 border border-white/20 active:scale-95 transition-all cursor-pointer backdrop-blur-md"
+          >
+            {viewLayout === 'map' ? (
+              <>
+                <List className="w-4 h-4 text-[#f95721]" />
+                <span>Show Vehicles List ({filteredCars.length})</span>
+              </>
+            ) : (
+              <>
+                <Map className="w-4 h-4 text-[#f95721]" />
+                <span>Show Fleet Map ({filteredCars.length})</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 

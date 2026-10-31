@@ -675,6 +675,8 @@ export async function savePartnerVehicleToFirestore(vehicle: {
   status: string;
   isB2bEligible?: boolean;
   image: string;
+  agencyId?: string;
+  agencyName?: string;
 }) {
   await ensureFirebaseAuth();
   const path = `cars/${vehicle.id}`;
@@ -709,6 +711,15 @@ export async function savePartnerVehicleToFirestore(vehicle: {
       mileageLimit: 'Unlimited km',
       description: `${vehicle.make} ${vehicle.model} (${vehicle.year}) managed via Partner Fleet.`,
       isAvailable: vehicle.status === 'available',
+      agencyId: vehicle.agencyId || '5',
+      agencyName: vehicle.agencyName || 'Mayache Prestige Cars',
+      agency: {
+        id: vehicle.agencyId || '5',
+        name: vehicle.agencyName || 'Mayache Prestige Cars',
+        city: vehicle.city,
+        verified: true,
+        rating: 4.9,
+      },
       updatedAt: new Date().toISOString(),
     }, { merge: true });
     console.log('✅ Partner vehicle saved to Firestore:', vehicle.id);

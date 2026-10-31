@@ -74,7 +74,8 @@ export default function App() {
 
 function AppContent() {
   const [currentRole, setCurrentRole] = useState<UserRole>('renter');
-  const { user } = useAuth();
+  const { user, updateUserProfile } = useAuth();
+  const [currentContractData, setCurrentContractData] = useState<any>(null);
 
   // Check URL query parameters and pathname
   const initialParams = useMemo(() => {
@@ -109,7 +110,7 @@ function AppContent() {
     }
 
     return {
-      location: sp.get('location') || 'Tetouan',
+      location: sp.get('location') || 'All Morocco',
       pickup: sp.get('pickupDate') || '2026-09-07',
       returnD: sp.get('returnDate') || '2026-09-11',
       carId,
@@ -315,12 +316,39 @@ function AppContent() {
     setIsBookingFlowModalOpen(true);
   };
 
+  const handleSaveProfile = (updated: UserProfile) => {
+    setUserProfile(updated);
+    if (user) {
+      updateUserProfile({
+        name: updated.fullName,
+        email: updated.email,
+        phone: updated.phone,
+        cin: updated.cinNumber,
+        drivingLicenceNumber: updated.drivingLicenceNumber,
+        avatar: updated.avatarUrl,
+      });
+      syncUserToFirestore({
+        id: user.id,
+        name: updated.fullName,
+        email: updated.email,
+        role: user.role,
+        phone: updated.phone,
+        cin: updated.cinNumber,
+        drivingLicenceNumber: updated.drivingLicenceNumber,
+        avatar: updated.avatarUrl,
+        verified: true,
+      });
+    }
+  };
+
   const handleBookingFlowSuccess = (bookingData: {
     car: SavedCar;
     dates: string;
     totalAmount: number;
     contractNumber: string;
+    paymentMethod?: string;
   }) => {
+    const paymentLabel = bookingData.paymentMethod || 'Carte Bancaire CMI (3D Secure)';
     const newTrip: PastTrip = {
       id: `trip-${Date.now()}`,
       carName: bookingData.car.name,
@@ -334,6 +362,25 @@ function AppContent() {
       contractId: bookingData.contractNumber,
     };
     setPastTrips((prev) => [newTrip, ...prev]);
+
+    // Store current active contract data for immediate PDF view / print
+    setCurrentContractData({
+      contractNumber: bookingData.contractNumber,
+      carName: bookingData.car.name,
+      carPlate: '58291-A-1',
+      renterName: user?.name || userProfile.fullName,
+      renterCin: user?.cin || userProfile.cinNumber || 'L-849201',
+      renterPhone: user?.phone || userProfile.phone || '+212 6 12 34 56 78',
+      renterEmail: user?.email || userProfile.email || 'traveler@airbcar.ma',
+      agencyName: 'Mayache Cars S.A.R.L.',
+      agencyCity: bookingData.car.location || 'Agadir',
+      pickupDate: bookingData.dates.split(' to ')[0] || new Date().toISOString().slice(0, 10),
+      returnDate: bookingData.dates.split(' to ')[1] || new Date().toISOString().slice(0, 10),
+      pickupLocation: bookingData.car.location,
+      totalAmount: bookingData.totalAmount,
+      depositAmount: 2000,
+      paymentMethod: paymentLabel,
+    });
 
     // Persist real-time to Google Cloud Firestore
     const newBookingId = `bk-${Date.now()}`;
@@ -352,7 +399,7 @@ function AppContent() {
       totalDays: 3,
       pricePerDay: bookingData.car.dailyRate || 850,
       totalPrice: bookingData.totalAmount,
-      depositAmount: 5000,
+      depositAmount: 2000,
       status: 'confirmed',
       dahirRegistrationId: bookingData.contractNumber,
     });
@@ -366,7 +413,7 @@ function AppContent() {
       carModel: bookingData.car.name,
       contractNumber: bookingData.contractNumber,
       digitalSignature: user?.name || userProfile.fullName,
-      cinNumber: user?.cin || userProfile.cin || 'L-482910',
+      cinNumber: user?.cin || userProfile.cinNumber || 'L-482910',
       drivingLicenceNumber: user?.drivingLicenceNumber || userProfile.drivingLicenceNumber || 'FR-9204812',
       status: 'signed',
       signedAt: new Date().toISOString(),
@@ -532,7 +579,7 @@ function AppContent() {
                       pastTrips={pastTrips}
                       onNavigateTab={handleTabChange}
                       onOpenSecondDriverModal={() => setIsSecondDriverModalOpen(true)}
-                      onSaveProfile={(updated) => setUserProfile(updated)}
+                      onSaveProfile={handleSaveProfile}
                       onSelectCarToBook={handleSelectCarToBook}
                       onOpenPdfModal={() => setIsPdfModalOpen(true)}
                     />
@@ -569,7 +616,7 @@ function AppContent() {
                       onNavigateTab={handleTabChange}
                       onSelectCarToBook={handleSelectCarToBook}
                       onOpenPdfModal={() => setIsPdfModalOpen(true)}
-                      onSaveProfile={(updated) => setUserProfile(updated)}
+                      onSaveProfile={handleSaveProfile}
                     />
                   )}
                 </div>
@@ -597,6 +644,7 @@ function AppContent() {
         isOpen={isPdfModalOpen}
         onClose={() => setIsPdfModalOpen(false)}
         isSigned={isSigned}
+        contractData={currentContractData}
       />
 
       <SecondDriverModal

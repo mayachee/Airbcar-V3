@@ -16,6 +16,7 @@ import {
   SHARED_APP_URL,
 } from '../services/oauth';
 import { testFirestoreConnection, syncUserToFirestore } from '../services/firebase';
+import { REAL_TEST_USERS } from '../data/realTestData';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export const MOCK_PROFILES: MockProfileInfo[] = [
@@ -88,7 +89,18 @@ interface AuthContextType {
   openAuthModal: (mode?: 'login' | 'signin' | 'signup' | 'otp' | 'setup') => void;
   closeAuthModal: () => void;
   loginWithGoogle: (customId?: string) => Promise<boolean>;
-  loginWithPassword: (email: string, pass: string, requestedRole?: 'renter' | 'partner' | 'admin') => Promise<boolean>;
+  loginWithPassword: (
+    email: string, 
+    pass: string, 
+    requestedRole?: 'renter' | 'partner' | 'admin',
+    extraDetails?: {
+      name?: string;
+      phone?: string;
+      cin?: string;
+      drivingLicenceNumber?: string;
+      agencyName?: string;
+    }
+  ) => Promise<boolean>;
   loginWithDemo: (role?: 'renter' | 'partner' | 'admin') => void;
   loginWithMockProfile: (profileKey?: MockProfileKey) => void;
   verifyAdminCredentials: (email: string, pass: string) => boolean;
@@ -206,8 +218,12 @@ export const AuthProviderComponent: React.FC<{ children: React.ReactNode }> = ({
       }
       return false;
     } catch (err: any) {
-      console.error('Google OAuth error:', err);
-      setAuthError(err.message || 'Google authentication encountered an error.');
+      console.warn('Google OAuth sign-in notice:', err);
+      if (err.code === 'auth/popup-closed-by-user' || err.message?.includes('closed') || err.message?.includes('cancelled')) {
+        setAuthError('Sign-in window was closed before completing authentication. You can try again or use the Instant 1-Click Login below.');
+      } else {
+        setAuthError(err.message || 'Google authentication encountered an error. Please try again or use 1-Click Login.');
+      }
       return false;
     } finally {
       setIsLoading(false);
@@ -224,7 +240,14 @@ export const AuthProviderComponent: React.FC<{ children: React.ReactNode }> = ({
   const loginWithPassword = async (
     inputEmail: string, 
     inputPass: string, 
-    requestedRole: 'renter' | 'partner' | 'admin' = 'renter'
+    requestedRole: 'renter' | 'partner' | 'admin' = 'renter',
+    extraDetails?: {
+      name?: string;
+      phone?: string;
+      cin?: string;
+      drivingLicenceNumber?: string;
+      agencyName?: string;
+    }
   ): Promise<boolean> => {
     setAuthError(null);
     setIsLoading(true);
@@ -277,17 +300,24 @@ export const AuthProviderComponent: React.FC<{ children: React.ReactNode }> = ({
         return false;
       }
 
+      // Check if email matches one of our 21 authentic seeded Moroccan users in Firestore
+      const matchedUser = REAL_TEST_USERS.find(
+        (u) => u.email.toLowerCase() === normalizedEmail
+      );
+
       const standardUser: AuthUser = {
-        id: `usr-${Date.now()}`,
-        name: inputEmail.split('@')[0].replace(/[._-]/g, ' '),
+        id: matchedUser ? matchedUser.uid : `usr-${Date.now()}`,
+        name: extraDetails?.name || matchedUser?.name || inputEmail.split('@')[0].replace(/[._-]/g, ' '),
         email: inputEmail,
-        role: requestedRole === 'partner' ? 'partner' : 'renter',
+        role: matchedUser ? matchedUser.role : (requestedRole === 'partner' ? 'partner' : 'renter'),
         provider: 'password',
         token: `airbcar-user-token-${Date.now()}`,
         verified: true,
-        phone: '+212 6 12 34 56 78',
-        cin: 'MA-749201',
-        agencyName: requestedRole === 'partner' ? 'Verified Agency Partner' : undefined,
+        phone: extraDetails?.phone || matchedUser?.phone || '+212 6 12 34 56 78',
+        cin: extraDetails?.cin || matchedUser?.cin || 'MA-749201',
+        drivingLicenceNumber: extraDetails?.drivingLicenceNumber || matchedUser?.drivingLicenceNumber || 'FR-9204812',
+        agencyName: extraDetails?.agencyName || matchedUser?.agencyName || (requestedRole === 'partner' ? 'Mayache Prestige Fleet' : undefined),
+        avatar: matchedUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
       };
 
       setUser(standardUser);

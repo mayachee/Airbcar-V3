@@ -220,16 +220,28 @@ export const PartnerPortal: React.FC<PartnerPortalProps> = ({
   const handleAddVehicle = (newVehicle: PartnerVehicle | PartnerVehicle[]) => {
     if (Array.isArray(newVehicle)) {
       setVehicles(prev => [...newVehicle, ...prev]);
-      newVehicle.forEach(v => savePartnerVehicleToFirestore(v));
+      newVehicle.forEach(v => savePartnerVehicleToFirestore({
+        ...v,
+        agencyId: partnerProfile.id,
+        agencyName: partnerProfile.agencyName,
+      } as any));
     } else {
       setVehicles(prev => [newVehicle, ...prev]);
-      savePartnerVehicleToFirestore(newVehicle);
+      savePartnerVehicleToFirestore({
+        ...newVehicle,
+        agencyId: partnerProfile.id,
+        agencyName: partnerProfile.agencyName,
+      } as any);
     }
   };
 
   const handleUpdateVehicle = (updatedVehicle: PartnerVehicle) => {
     setVehicles(prev => prev.map(v => v.id === updatedVehicle.id ? updatedVehicle : v));
-    savePartnerVehicleToFirestore(updatedVehicle);
+    savePartnerVehicleToFirestore({
+      ...updatedVehicle,
+      agencyId: partnerProfile.id,
+      agencyName: partnerProfile.agencyName,
+    } as any);
   };
 
   const handleDeleteVehicle = (vehicleId: string) => {

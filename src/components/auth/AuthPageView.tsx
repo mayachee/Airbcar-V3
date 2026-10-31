@@ -113,10 +113,14 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
       return;
     }
 
-    // If regular password login
+    // If regular password login / sign up
     if (method === 'email' && email && password) {
       const assignedRole = acctType === 'partner' ? 'partner' : 'renter';
-      const success = await loginWithPassword(email, password, assignedRole);
+      const success = await loginWithPassword(email, password, assignedRole, {
+        name: fullName.trim() || undefined,
+        phone: phone ? (phone.startsWith('+212') ? phone : `+212 ${phone}`) : undefined,
+        agencyName: acctType === 'partner' ? (agencyName.trim() || 'Morocco Partner Fleet') : undefined,
+      });
       if (success) {
         if (onSuccessRole) onSuccessRole(assignedRole);
         onClose();
@@ -358,18 +362,50 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
             )}
 
             {/* Auth Error / Form Error Notification */}
-            {(formError || authError) && (
-              <div className="p-3.5 mb-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-950 space-y-2">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                  <div className="flex-1 leading-snug">
-                    <strong className="font-semibold text-red-900 block">Security Alert:</strong>
-                    <span>{formError || authError}</span>
+            {(formError || authError) && (() => {
+              const activeMessage = formError || authError || '';
+              const isPopupClosed = 
+                activeMessage.toLowerCase().includes('closed') || 
+                activeMessage.toLowerCase().includes('cancelled') ||
+                activeMessage.toLowerCase().includes('popup');
+
+              return (
+                <div className={`p-3.5 mb-4 rounded-xl text-xs space-y-2.5 transition-all ${
+                  isPopupClosed 
+                    ? 'bg-amber-50 border border-amber-200 text-amber-950' 
+                    : 'bg-red-50 border border-red-200 text-red-950'
+                }`}>
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className={`w-4 h-4 shrink-0 mt-0.5 ${isPopupClosed ? 'text-amber-600' : 'text-red-600'}`} />
+                    <div className="flex-1 leading-snug">
+                      <strong className={`font-semibold block ${isPopupClosed ? 'text-amber-900' : 'text-red-900'}`}>
+                        {isPopupClosed ? 'Sign-in Window Closed' : 'Authentication Notice'}
+                      </strong>
+                      <span className="text-[12px] opacity-90">{activeMessage}</span>
+                    </div>
                   </div>
-                </div>
-                {!formError && (
-                  <div className="pt-1 flex items-center justify-between gap-2 border-t border-red-200/60 text-[11px]">
-                    <span className="text-red-800">Need instant testing access?</span>
+
+                  <div className={`pt-2 flex flex-wrap items-center justify-between gap-2 border-t text-[11px] ${
+                    isPopupClosed ? 'border-amber-200/70' : 'border-red-200/60'
+                  }`}>
+                    {isPopupClosed ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = await loginWithGoogle();
+                          if (ok) {
+                            if (onSuccessRole) onSuccessRole(acctType === 'partner' ? 'partner' : 'renter');
+                            onClose();
+                          }
+                        }}
+                        className="font-bold text-[#1a1412] hover:text-[#f95721] underline cursor-pointer flex items-center gap-1"
+                      >
+                        <span>Retry Google Sign-In</span>
+                      </button>
+                    ) : (
+                      <span className="text-[#736357]">Need instant access?</span>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => {
@@ -378,15 +414,15 @@ export const AuthPageView: React.FC<AuthPageViewProps> = ({
                         if (onSuccessRole) onSuccessRole(role);
                         onClose();
                       }}
-                      className="font-bold text-[#f95721] hover:underline flex items-center gap-1 cursor-pointer"
+                      className="font-bold text-[#f95721] hover:underline flex items-center gap-1 cursor-pointer ml-auto"
                     >
                       <Sparkles className="w-3 h-3" />
                       <span>Use Instant 1-Click Login</span>
                     </button>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              );
+            })()}
 
             {/* ===================== FORM CONTENT ===================== */}
             {mode === 'otp' ? (
